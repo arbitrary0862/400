@@ -40,7 +40,7 @@
       margin-bottom: 12px;
     }
     .row:last-child { margin-bottom: 0; }
-    .label { font-weight: bold; font-size: 1.1rem; width: 90px; }
+    .label { font-weight: bold; font-size: 1.1rem; width: 95px; }
     .label span { display: block; font-size: 0.75rem; color: var(--muted); font-weight: normal; }
     .btn-group { display: flex; gap: 8px; flex: 1; }
     button {
@@ -60,6 +60,24 @@
       background: var(--primary);
       border-color: var(--primary);
       color: #fff;
+    }
+    .setting-bar {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      font-size: 0.85rem;
+      color: var(--muted);
+      margin-top: 14px;
+      padding-top: 12px;
+      border-top: 1px solid var(--border);
+    }
+    .setting-bar select {
+      background: #252b38;
+      color: var(--text);
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      padding: 4px 8px;
+      font-size: 0.85rem;
     }
     .reset-btn {
       width: 100%;
@@ -81,6 +99,13 @@
       font-weight: bold;
       letter-spacing: 6px;
       color: #6ee7b7;
+      cursor: pointer;
+      transition: 0.15s;
+      position: relative;
+    }
+    .solution-item:hover {
+      background: rgba(16, 185, 129, 0.28);
+      transform: translateY(-1px);
     }
     .solution-sub {
       font-size: 0.85rem;
@@ -88,11 +113,40 @@
       color: var(--text);
       margin-top: 4px;
     }
+    .copy-hint {
+      font-size: 0.75rem;
+      letter-spacing: normal;
+      color: #a7f3d0;
+      margin-top: 4px;
+      opacity: 0.85;
+    }
     table { width: 100%; border-collapse: collapse; font-size: 0.9rem; text-align: center; }
     th, td { padding: 8px 4px; border-bottom: 1px solid var(--border); }
     th { color: var(--muted); }
     tr.highlight { background: rgba(59, 130, 246, 0.2); }
     tr.dim { opacity: 0.35; }
+
+    /* 複製成功浮動提示 */
+    .toast {
+      position: fixed;
+      bottom: 24px;
+      left: 50%;
+      transform: translateX(-50%) translateY(20px);
+      background: var(--accent);
+      color: #06281e;
+      font-weight: bold;
+      padding: 10px 20px;
+      border-radius: 999px;
+      box-shadow: 0 4px 12px rgba(0,0,0,0.4);
+      opacity: 0;
+      pointer-events: none;
+      transition: 0.25s ease;
+      font-size: 0.95rem;
+    }
+    .toast.show {
+      opacity: 1;
+      transform: translateX(-50%) translateY(0);
+    }
   </style>
 </head>
 <body>
@@ -133,6 +187,16 @@
           <button onclick="selectVal('d', 2)">2</button>
         </div>
       </div>
+
+      <div class="setting-bar">
+        <label for="copy-format">📋 複製格式：</label>
+        <select id="copy-format">
+          <option value="code">純數字 (例: 211)</option>
+          <option value="dash">橫線分隔 (例: 2-1-1)</option>
+          <option value="detail">完整提示 (例: 211 左2中1右1)</option>
+        </select>
+      </div>
+
       <button class="reset-btn" onclick="resetAll()">🔄 重置 (下一場)</button>
     </div>
 
@@ -155,8 +219,9 @@
     </div>
   </div>
 
+  <div class="toast" id="toast">已複製！</div>
+
   <script>
-    // 完整 15 組對照表資料
     const DATA = [
       { a: 0, b: 0, c: 1, d: 1, ans: [2, 1, 1] },
       { a: 0, b: 1, c: 0, d: 1, ans: [1, 2, 1] },
@@ -176,20 +241,55 @@
     ];
 
     let state = { a: null, b: null, c: null, d: null };
+    let lastAutoCopied = '';
 
     function selectVal(key, val) {
-      // 再次點擊同按鈕則取消選取
       state[key] = (state[key] === val) ? null : val;
       updateUI();
     }
 
     function resetAll() {
       state = { a: null, b: null, c: null, d: null };
+      lastAutoCopied = '';
       updateUI();
     }
 
+    function formatCopyText(ans) {
+      const mode = document.getElementById('copy-format').value;
+      if (mode === 'dash') return ans.join('-');
+      if (mode === 'detail') return `${ans.join('')} (左${ans[0]} 中${ans[1]} 右${ans[2]})`;
+      return ans.join('');
+    }
+
+    function copyAnswer(ans, isAuto = false) {
+      const text = formatCopyText(ans);
+      if (isAuto && text === lastAutoCopied) return;
+      if (isAuto) lastAutoCopied = text;
+
+      navigator.clipboard.writeText(text).then(() => {
+        showToast(`📋 已${isAuto ? '自動' : ''}複製：${text}`);
+      }).catch(() => {
+        // 備用複製機制
+        const input = document.createElement('input');
+        input.value = text;
+        document.body.appendChild(input);
+        input.select();
+        document.execCommand('copy');
+        document.body.removeChild(input);
+        showToast(`📋 已${isAuto ? '自動' : ''}複製：${text}`);
+      });
+    }
+
+    let toastTimer;
+    function showToast(msg) {
+      const toast = document.getElementById('toast');
+      toast.textContent = msg;
+      toast.classList.add('show');
+      clearTimeout(toastTimer);
+      toastTimer = setTimeout(() => toast.classList.remove('show'), 2200);
+    }
+
     function updateUI() {
-      // 更新按鈕狀態
       ['a', 'b', 'c', 'd'].forEach(key => {
         const buttons = document.querySelectorAll(`.row[data-key="${key}"] button`);
         buttons.forEach(btn => {
@@ -197,7 +297,6 @@
         });
       });
 
-      // 篩選符合條件的組合
       const hasInput = Object.values(state).some(v => v !== null);
       const matches = DATA.filter(item =>
         (state.a === null || item.a === state.a) &&
@@ -206,7 +305,6 @@
         (state.d === null || item.d === state.d)
       );
 
-      // 渲染結果區
       const statusEl = document.getElementById('status-text');
       const solEl = document.getElementById('solutions');
       solEl.innerHTML = '';
@@ -216,34 +314,9 @@
       } else if (matches.length === 0) {
         statusEl.textContent = '❌ 查無符合組合，請檢查是否按錯數字';
       } else if (matches.length === 1) {
-        statusEl.textContent = '✅ 已鎖定唯一解答！';
+        statusEl.textContent = '✅ 已鎖定唯一解答（已自動複製）！';
         renderSolutionCard(matches[0].ans, solEl);
+        copyAnswer(matches[0].ans, true);
       } else {
-        statusEl.textContent = `🔍 剩餘 ${matches.length} 種可能組合（請繼續輸入下一項）：`;
-        matches.forEach(m => renderSolutionCard(m.ans, solEl));
-      }
-
-      // 渲染底部對照表
-      const tbody = document.getElementById('table-body');
-      tbody.innerHTML = DATA.map(item => {
-        const isMatch = matches.includes(item);
-        const rowClass = !hasInput ? '' : (isMatch ? 'highlight' : 'dim');
-        return `<tr class="${rowClass}">
-          <td>${item.a}</td><td>${item.b}</td><td>${item.c}</td><td>${item.d}</td>
-          <td><strong>${item.ans.join(' - ')}</strong></td>
-        </tr>`;
-      }).join('');
-    }
-
-    function renderSolutionCard(ans, container) {
-      const div = document.createElement('div');
-      div.className = 'solution-item';
-      div.innerHTML = `${ans[0]} - ${ans[1]} - ${ans[2]}
-        <div class="solution-sub">左台 ${ans[0]} 人 ｜ 中台 ${ans[1]} 人 ｜ 右台 ${ans[2]} 人</div>`;
-      container.appendChild(div);
-    }
-
-    updateUI();
-  </script>
-</body>
-</html>
+        lastAutoCopied = '';
+        statusEl.textContent = `🔍 剩餘 ${matches.length} 種可能組合（點擊卡片可複製）：`;
